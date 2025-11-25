@@ -7,14 +7,14 @@ import { Upload, CheckCircle, AlertCircle, Loader2, FileText, ArrowRight, Tags, 
 interface CandidateScreenerProps {
   jobs: Job[];
   onScreeningComplete: (candidate: Candidate) => void;
-  onQuickRegister?: (candidate: Candidate) => void; // New prop
+  onQuickRegister?: (candidate: Candidate) => void;
 }
 
 const CandidateScreener: React.FC<CandidateScreenerProps> = ({ jobs, onScreeningComplete, onQuickRegister }) => {
   const [selectedJobId, setSelectedJobId] = useState('');
   const [candidateName, setCandidateName] = useState('');
   const [cvText, setCvText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalysing, setIsAnalysing] = useState(false);
   const [currentResult, setCurrentResult] = useState<Candidate | null>(null);
 
   // Quick Add State
@@ -79,7 +79,7 @@ const CandidateScreener: React.FC<CandidateScreenerProps> = ({ jobs, onScreening
     const job = jobs.find(j => j.id === selectedJobId);
     if (!job) return;
 
-    setIsAnalyzing(true);
+    setIsAnalysing(true);
     setCurrentResult(null);
 
     // Construct a full context description for the AI
@@ -105,6 +105,7 @@ const CandidateScreener: React.FC<CandidateScreenerProps> = ({ jobs, onScreening
       const newCandidate: Candidate = {
         id: crypto.randomUUID(),
         name: candidateName,
+        email: '', 
         role: job.id,
         cvText: cvText,
         screeningResult: result,
@@ -116,7 +117,7 @@ const CandidateScreener: React.FC<CandidateScreenerProps> = ({ jobs, onScreening
     } catch (error) {
       alert("Analysis failed. Please try again.");
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalysing(false);
     }
   };
 
@@ -216,15 +217,15 @@ const CandidateScreener: React.FC<CandidateScreenerProps> = ({ jobs, onScreening
 
             <button
               onClick={handleAnalyze}
-              disabled={isAnalyzing || !selectedJobId || !cvText || !candidateName}
+              disabled={isAnalysing || !selectedJobId || !cvText || !candidateName}
               className={`w-full mt-6 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 transition-all ${
-                isAnalyzing || !selectedJobId || !cvText || !candidateName
+                isAnalysing || !selectedJobId || !cvText || !candidateName
                   ? 'bg-slate-300 cursor-not-allowed'
                   : 'bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/20'
               }`}
             >
-              {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle size={20} />}
-              {isAnalyzing ? 'Analyse Profile...' : 'Run AI Screening'}
+              {isAnalysing ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle size={20} />}
+              {isAnalysing ? 'Analysing Profile...' : 'Run AI Screening'}
             </button>
           </div>
         </div>

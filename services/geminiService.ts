@@ -92,6 +92,11 @@ export const extractCandidateInfo = async (
   base64Data: string,
   mimeType: string
 ): Promise<ExtractedCandidateData> => {
+  // Validation to prevent API 400 errors for unsupported types
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') {
+      throw new Error("Word documents are not currently supported for auto-extraction. Please upload a PDF.");
+  }
+
   const ai = getAiClient();
 
   const extractionSchema: Schema = {

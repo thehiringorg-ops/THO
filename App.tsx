@@ -1,236 +1,252 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { ViewState, User, Job, Candidate, Client, ServiceRequest, AccessRequest, SystemTicket, ActivityLog, ChatMessage, ChatGroup, SystemConfig, CommissionRecord, PayrollRecord, UserAvailability, AdminUpdateMetadata, JobAlert, UserNotification, INDUSTRIES } from './types';
+import { collection, onSnapshot, setDoc, updateDoc, doc, deleteDoc } from './firebase'; // Using the mock firebase
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
+import JobList from './components/JobList';
 import JobCreator from './components/JobCreator';
 import CandidateScreener from './components/CandidateScreener';
-import JobList from './components/JobList';
-import CandidatePortal from './components/CandidatePortal';
-import Login from './components/Login';
-import TeamManagement from './components/TeamManagement';
-import Clients from './components/Clients';
 import Candidates from './components/Candidates';
 import Leads from './components/Leads';
+import TeamManagement from './components/TeamManagement';
+import Clients from './components/Clients';
 import Financials from './components/Financials';
-import { ViewState, Job, Candidate, Subscriber, User, Client, ActivityLog, Expense } from './types';
+import ExecutiveAnalytics from './components/ExecutiveAnalytics';
+import Approvals from './components/Approvals';
+import SuperAdminSettings from './components/SuperAdminSettings';
+import Commissions from './components/Commissions';
+import Payroll from './components/Payroll';
+import MonthlyReports from './components/MonthlyReports';
+import Tutorials from './components/Tutorials';
+import ChatSystem from './components/ChatSystem';
+import NotificationsView from './components/NotificationsView';
+import CandidatePortal from './components/CandidatePortal';
+import ClientPortal from './components/ClientPortal';
+import SpecialisedServices from './components/SpecialisedServices';
+import UserProfile from './components/UserProfile';
+import SystemSupport from './components/SystemSupport';
+import Login from './components/Login';
+import CoPilot from './components/CoPilot';
+import { Globe, Shield, Building2, Monitor } from 'lucide-react';
+
+// Helper to create default admin if no users exist
+const DEFAULT_ADMIN: User = {
+  id: 'admin-1',
+  name: 'System Admin',
+  email: 'admin@thehiringorg.co.za',
+  password: 'password',
+  role: 'SuperAdmin',
+  status: 'Active',
+  avatar: 'https://ui-avatars.com/api/?name=System+Admin&background=random',
+  permissions: [],
+  staffNumber: 'STF-001',
+  phoneNumber: '+27 11 555 0100',
+  officeExtension: '1001',
+  createdAt: new Date().toISOString()
+};
+
+const DEFAULT_CONFIG: SystemConfig = {
+  companyName: 'The Hiring Org',
+  supportEmail: 'support@thehiringorg.co.za',
+  enableCandidateAI: true,
+  enableCandidateFAQs: true,
+  enableCandidateRecruiterMessaging: true,
+  defaultCurrency: 'ZAR',
+  retentionDays: 365,
+  maintenanceMode: false,
+  allowGuestAccess: true,
+  sessionTimeoutMinutes: 60,
+  maxUploadSizeMB: 10,
+  requireTwoFactor: false,
+  themeColor: 'Slate',
+  enableChatFileSharing: true,
+  enableChatGiphy: true,
+  chatRetentionDays: 365,
+  timezone: 'Africa/Johannesburg',
+  dateFormat: 'DD/MM/YYYY',
+  systemLanguage: 'English (UK)',
+  autoBackup: true,
+  backupFrequency: 'Daily',
+  standardCommissionRate: 10,
+  commissionFlatFee: 0
+};
+
+// Mock Data Generators
+const generateMockData = () => {
+    // Generate Mock Staff
+    const users: User[] = Array.from({ length: 10 }).map((_, i) => {
+        const role = i === 0 ? 'Admin' : i < 4 ? 'Hiring Manager' : 'Recruiter';
+        return {
+            id: `u-mock-${i}`,
+            staffNumber: `STF-${String(10+i).padStart(3, '0')}`,
+            name: ['Sarah Connor', 'James Bond', 'Ethan Hunt', 'Jason Bourne', 'Jack Ryan', 'Ellen Ripley', 'John Wick', 'Lara Croft', 'Indiana Jones', 'Marty McFly'][i],
+            email: `staff${i}@thehiringorg.co.za`,
+            role: role as any,
+            status: 'Active',
+            avatar: `https://ui-avatars.com/api/?name=User+${i}&background=random`,
+            permissions: [],
+            revenueTarget: 1000000,
+            reportsTo: 'admin-1',
+            reportsToName: 'System Admin',
+            phoneNumber: `+27 82 555 010${i}`,
+            officeExtension: `100${i}`,
+            availability: 'Online',
+            createdAt: new Date(Date.now() - (i * 86400000 * 30)).toISOString() // Staggered start dates
+        };
+    });
+
+    const clients: Client[] = Array.from({ length: 10 }).map((_, i) => ({
+        id: `cli-mock-${i}`,
+        uin: `CLT-${10000 + i}`,
+        name: ['Acme Corp', 'Global Tech', 'Sunrise Mining', 'Apex Financial', 'MediCare Plus', 'Green Energy Solutions', 'BuildRight Construction', 'AgriGrow', 'Urban Logistics', 'BlueSky Consulting'][i],
+        contactPerson: ['John Smith', 'Sarah Jones', 'Mike Brown', 'Emily Davis', 'David Wilson', 'Lisa Taylor', 'Robert Miller', 'Jessica White', 'William Harris', 'Karen Martin'][i],
+        email: `contact${i}@client.com`,
+        phone: `+27 11 555 020${i}`,
+        industry: INDUSTRIES[i % INDUSTRIES.length],
+        contractNature: i % 3 === 0 ? 'Retainer' : 'Placement Fee',
+        budget: (i + 1) * 500000,
+        paymentStatus: i === 3 ? 'Overdue' : 'Good Standing',
+        allocatedBudget: (i + 1) * 200000,
+        paidAmount: (i + 1) * 100000,
+        clientStatus: 'Active',
+        standardFee: 15,
+        ownerName: 'System Admin',
+        ownerId: 'admin-1',
+        createdAt: new Date().toISOString(),
+        portalAccess: true,
+        password: 'password123'
+    }));
+
+    const jobs: Job[] = Array.from({ length: 10 }).map((_, i) => ({
+        id: `job-mock-${i}`,
+        clientId: clients[i % clients.length].id,
+        title: ['Senior Developer', 'Financial Manager', 'Mining Engineer', 'HR Specialist', 'Nurse Manager', 'Solar Technician', 'Site Foreman', 'Agronomist', 'Logistics Coordinator', 'Business Analyst'][i],
+        department: ['IT', 'Finance', 'Operations', 'Human Resources', 'Healthcare', 'Engineering', 'Construction', 'Agriculture', 'Logistics', 'Consulting'][i],
+        industry: INDUSTRIES[i % INDUSTRIES.length],
+        location: ['Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Sandton'][i % 5],
+        description: `We are seeking a qualified professional for this role. Responsible for leading key projects and ensuring operational excellence within the ${INDUSTRIES[i % INDUSTRIES.length]} sector.`,
+        responsibilities: ['Manage daily operations', 'Lead team meetings', 'Report to senior management', 'Ensure compliance with regulations'],
+        requirements: ['Degree in relevant field', '5+ years experience', 'Strong communication skills', 'Proficiency in industry software'],
+        desirableSkills: ['Project Management', 'Leadership', 'Data Analysis'],
+        benefits: ['Medical Aid', 'Pension Fund', 'Performance Bonus'],
+        listingReference: `JOB-2024-${100 + i}`,
+        applyBy: new Date(Date.now() + 86400000 * 30).toISOString(),
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        type: 'Full-time',
+        salaryType: 'Range',
+        salaryMin: 30000 + (i * 5000),
+        salaryMax: 45000 + (i * 5000),
+        salaryCurrency: 'ZAR',
+        postedBy: users[i % users.length].id,
+        recruiterName: users[i % users.length].name,
+        recruiterAvatar: users[i % users.length].avatar
+    }));
+
+    const candidates: Candidate[] = Array.from({ length: 10 }).map((_, i) => ({
+        id: `cand-mock-${i}`,
+        name: ['Alice Johnson', 'Bob Williams', 'Charlie Brown', 'Diana Miller', 'Evan Davis', 'Fiona Wilson', 'George Moore', 'Hannah Taylor', 'Ian Anderson', 'Julia Thomas'][i],
+        email: `candidate${i}@email.com`,
+        role: jobs[i % jobs.length].id, // Applied to a job
+        status: ['New', 'Screened', 'Interview', 'Hired', 'New'][i % 5] as any,
+        experienceYears: 3 + i,
+        location: ['Johannesburg', 'Cape Town', 'Durban'][i % 3],
+        skills: ['Communication', 'Management', 'Microsoft Office', 'Teamwork'],
+        applicationDate: new Date().toISOString(),
+        cvText: "Experienced professional with a proven track record in the industry. Dedicated to achieving results and driving business growth.",
+        screeningResult: {
+            matchScore: 60 + (i * 3),
+            summary: "Candidate shows strong potential based on experience matching job requirements.",
+            strengths: ["Experience", "Education"],
+            weaknesses: ["Specific tool knowledge"],
+            matchingSkills: ["Management", "Teamwork"]
+        }
+    }));
+
+    return { users, clients, jobs, candidates };
+};
+
+type AppDomain = 'jobs' | 'staff' | 'client';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewState>(ViewState.CANDIDATE_PORTAL);
+  const [currentDomain, setCurrentDomain] = useState<AppDomain>('staff'); // Default to staff for dev
+  const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD); 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [nextJobSequence, setNextJobSequence] = useState(104);
-  const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [impersonatingAdmin, setImpersonatingAdmin] = useState<User | null>(null);
+  const [chatTargetId, setChatTargetId] = useState<string | null>(null);
+  const [impersonatingClientId, setImpersonatingClientId] = useState<string | null>(null); // New state for client impersonation
 
-  // --- Data State ---
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: 'u0',
-      name: 'The Chairman',
-      email: 'chairman@thehiringorg.co.za',
-      role: 'SuperAdmin', // 1st Tier
-      status: 'Active',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces'
-    },
-    {
-      id: 'u1',
-      name: 'Sarah Jenkins',
-      email: 'sarah.j@thehiringorg.co.za',
-      role: 'Recruiter',
-      status: 'Active',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces'
-    },
-    {
-      id: 'u2',
-      name: 'Mike Ross',
-      email: 'mike.r@thehiringorg.co.za',
-      role: 'Hiring Manager',
-      status: 'Active',
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150&h=150&fit=crop&crop=faces'
-    },
-    {
-      id: 'u3',
-      name: 'Jessica Pearson',
-      email: 'jessica.p@thehiringorg.co.za',
-      role: 'Admin', // 2nd Tier
-      status: 'Active',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop&crop=faces'
-    }
-  ]);
-  
-  const [clients, setClients] = useState<Client[]>([
-    { 
-        id: 'c1', 
-        name: 'TechFin Solutions', 
-        contactPerson: 'David Miller', 
-        email: 'd.miller@techfin.com', 
-        phone: '+27 11 888 1234', 
-        logo: '', 
-        website: 'https://example.com',
-        industry: 'Fintech',
-        address: '12 Sandton Dr, Sandton, 2196',
-        isHotlist: true,
-        ownerName: 'Jessica Pearson',
-        ownerId: 'u3',
-        createdBy: 'u3',
-        createdByName: 'Jessica Pearson',
-        createdAt: new Date(Date.now() - 1000000000).toISOString(),
-        
-        // Financials Mock
-        contractNature: 'Retainer',
-        budget: 1200000,
-        allocatedBudget: 450000,
-        paidAmount: 300000,
-        paymentStatus: 'Good Standing',
-        expenses: [
-            { id: 'e1', description: 'Q1 Retainer Fee', amount: 100000, date: '2024-01-15', status: 'Paid' },
-            { id: 'e2', description: 'Recruitment Ad Spend', amount: 50000, date: '2024-02-01', status: 'Paid' },
-            { id: 'e3', description: 'Q2 Retainer Fee', amount: 100000, date: '2024-04-15', status: 'Pending' }
-        ]
-    },
-    { 
-        id: 'c2', 
-        name: 'Creative Studio', 
-        contactPerson: 'Amanda Cole', 
-        email: 'amanda@studio.co.za', 
-        phone: '+27 21 444 5678', 
-        logo: '', 
-        website: 'https://example.com',
-        industry: 'Marketing',
-        address: '8 Long Street, Cape Town, 8001',
-        isHotlist: false,
-        ownerName: 'Sarah Jenkins',
-        ownerId: 'u1',
-        createdBy: 'u3',
-        createdByName: 'Jessica Pearson',
-        createdAt: new Date(Date.now() - 800000000).toISOString(),
+  // Data Collections
+  const [users, setUsers] = useState<User[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [systemTickets, setSystemTickets] = useState<SystemTicket[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
+  const [commissions, setCommissions] = useState<CommissionRecord[]>([]);
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig>(DEFAULT_CONFIG);
 
-        // Financials Mock
-        contractNature: 'Project-based',
-        budget: 500000,
-        allocatedBudget: 500000,
-        paidAmount: 100000,
-        paymentStatus: 'Overdue',
-        expenses: [
-            { id: 'e4', description: 'Initial Deposit', amount: 100000, date: '2024-03-10', status: 'Paid' },
-            { id: 'e5', description: 'Milestone 1 Delivery', amount: 200000, date: '2024-05-01', status: 'Overdue' }
-        ]
-    }
-  ]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [jobs, setJobs] = useState<Job[]>([
-    {
-      id: '1',
-      clientId: 'c1',
-      title: 'Senior Frontend Engineer',
-      department: 'Engineering',
-      industry: 'Software Development',
-      location: 'Johannesburg, Gauteng',
-      description: 'We are looking for a Senior Frontend Engineer to lead our UI development initiatives.',
-      responsibilities: ['Lead React development', 'Mentor juniors', 'Collaborate with UX', 'Optimise performance'],
-      requirements: ['5+ years frontend exp', 'React, TypeScript, CSS', 'State management', 'Browser performance'],
-      desirableSkills: ['Next.js', 'GraphQL', 'AWS'],
-      benefits: ['Competitive salary', 'Remote-first', 'Learning budget'],
-      listingReference: 'THO-0101',
-      applyBy: '2024-12-31',
-      status: 'Active',
-      createdAt: new Date().toISOString(),
-      dateOpened: new Date().toISOString(),
-      type: 'Full-time',
-      salaryType: 'Range',
-      salaryMin: 850000,
-      salaryMax: 1200000,
-      salaryCurrency: 'ZAR',
-      postedBy: 'u1',
-      recruiterName: 'Sarah Jenkins',
-      recruiterAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces',
-      lastActionBy: 'The Chairman',
-      lastActionReason: 'Initial approval for Q4 hiring plan.',
-      lastActionDate: new Date().toISOString()
-    },
-    {
-      id: '2',
-      clientId: 'c2',
-      title: 'UX/UI Designer',
-      department: 'Design',
-      industry: 'Creative / Design',
-      location: 'Cape Town, Western Cape',
-      description: 'Seeking a creative UX/UI Designer.',
-      responsibilities: ['Wireframes', 'Visual design', 'User research', 'Design systems'],
-      requirements: ['3+ years exp', 'Figma', 'Portfolio', 'Presentation skills'],
-      desirableSkills: ['HTML/CSS', 'Animation'],
-      benefits: ['Studio environment', 'MacBook Pro', 'Team lunches'],
-      listingReference: 'THO-0102',
-      applyBy: '2024-11-15',
-      status: 'Active',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      dateOpened: new Date(Date.now() - 86000000).toISOString(),
-      type: 'Full-time',
-      salaryType: 'Range',
-      salaryMin: 450000,
-      salaryMax: 650000,
-      salaryCurrency: 'ZAR',
-      postedBy: 'u2',
-      recruiterName: 'Mike Ross',
-      recruiterAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150&h=150&fit=crop&crop=faces'
-    }
-  ]);
+  // Initialize / Load Data
+  useEffect(() => {
+    // Mock Firebase Listeners
+    const unsubUsers = onSnapshot(collection(null, 'users'), (snap: any) => {
+        const data = snap.docs.map((d: any) => d.data());
+        if (data.length === 0) {
+            // Always ensure Admin exists
+            setDoc(doc(null, 'users', DEFAULT_ADMIN.id), DEFAULT_ADMIN);
+            
+            // Inject Full Mock Data Suite if empty
+            const mocks = generateMockData();
+            mocks.users.forEach(u => setDoc(doc(null, 'users', u.id), u));
+            mocks.clients.forEach(c => setDoc(doc(null, 'clients', c.id), c));
+            mocks.jobs.forEach(j => setDoc(doc(null, 'jobs', j.id), j));
+            mocks.candidates.forEach(c => setDoc(doc(null, 'candidates', c.id), c));
+        } else {
+            setUsers(data);
+        }
+    });
+    
+    const unsubJobs = onSnapshot(collection(null, 'jobs'), (snap: any) => setJobs(snap.docs.map((d: any) => d.data())));
+    const unsubCandidates = onSnapshot(collection(null, 'candidates'), (snap: any) => setCandidates(snap.docs.map((d: any) => d.data())));
+    const unsubClients = onSnapshot(collection(null, 'clients'), (snap: any) => setClients(snap.docs.map((d: any) => d.data())));
+    const unsubServices = onSnapshot(collection(null, 'serviceRequests'), (snap: any) => setServiceRequests(snap.docs.map((d: any) => d.data())));
+    const unsubAccess = onSnapshot(collection(null, 'accessRequests'), (snap: any) => setAccessRequests(snap.docs.map((d: any) => d.data())));
+    const unsubTickets = onSnapshot(collection(null, 'tickets'), (snap: any) => setSystemTickets(snap.docs.map((d: any) => d.data())));
+    const unsubLogs = onSnapshot(collection(null, 'logs'), (snap: any) => setActivityLogs(snap.docs.map((d: any) => d.data())));
+    const unsubMessages = onSnapshot(collection(null, 'messages'), (snap: any) => setMessages(snap.docs.map((d: any) => d.data())));
+    const unsubGroups = onSnapshot(collection(null, 'chatGroups'), (snap: any) => setChatGroups(snap.docs.map((d: any) => d.data())));
+    const unsubComms = onSnapshot(collection(null, 'commissions'), (snap: any) => setCommissions(snap.docs.map((d: any) => d.data())));
+    const unsubPayroll = onSnapshot(collection(null, 'payroll'), (snap: any) => setPayrollRecords(snap.docs.map((d: any) => d.data())));
+    
+    const unsubConfig = onSnapshot(collection(null, 'config'), (snap: any) => {
+        if (!snap.empty) setSystemConfig(snap.docs[0].data());
+        else setDoc(doc(null, 'config', 'main'), DEFAULT_CONFIG);
+    });
 
-  const [candidates, setCandidates] = useState<Candidate[]>([
-    {
-      id: 'APP-982310',
-      name: 'Nandi Dlamini',
-      email: 'nandi.d@example.co.za',
-      role: '1',
-      cvText: 'Experienced React developer...',
-      status: 'Screened',
-      location: 'Johannesburg',
-      noticePeriod: '30 Days',
-      skills: ['React', 'TypeScript', 'Node.js', 'Tailwind CSS'],
-      experienceYears: 5,
-      applicationDate: new Date().toISOString(),
-      timeline: [
-          { status: 'Applied', date: new Date().toISOString() },
-          { status: 'Screened', date: new Date().toISOString(), note: 'Strong match' }
-      ],
-      screeningResult: {
-        matchScore: 85,
-        summary: 'Strong technical fit.',
-        strengths: ['React', 'TypeScript'],
-        weaknesses: ['No AWS'],
-        matchingSkills: ['React', 'TypeScript']
-      }
-    }
-  ]);
+    return () => {
+        // Cleanup listeners
+    };
+  }, []);
 
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([
-    {
-      id: 'log-1',
-      userId: 'u3',
-      userName: 'Jessica Pearson',
-      userAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop&crop=faces',
-      action: 'Created Client',
-      details: 'Added new client: TechFin Solutions',
-      type: 'Client',
-      timestamp: new Date(Date.now() - 1000000000).toISOString()
-    },
-    {
-      id: 'log-2',
-      userId: 'u1',
-      userName: 'Sarah Jenkins',
-      userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces',
-      action: 'Posted Job',
-      details: 'Published listing THO-0101 (Senior Frontend Engineer)',
-      type: 'Job',
-      timestamp: new Date().toISOString()
-    }
-  ]);
+  // Domain Detection Logic (Simulated)
+  useEffect(() => {
+      const hostname = window.location.hostname;
+      if (hostname.startsWith('jobs.')) setCurrentDomain('jobs');
+      else if (hostname.startsWith('client.')) setCurrentDomain('client');
+      else if (hostname.startsWith('staff.')) setCurrentDomain('staff');
+      // Default to staff for localhost if not overridden
+  }, []);
 
-  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
-  const [candidateProfiles, setCandidateProfiles] = useState<Candidate[]>([]);
-
-  // --- Helpers ---
   const logActivity = (action: string, details: string, type: ActivityLog['type']) => {
       if (!currentUser) return;
-      const newLog: ActivityLog = {
+      const log: ActivityLog = {
           id: `log-${Date.now()}`,
           userId: currentUser.id,
           userName: currentUser.name,
@@ -240,398 +256,342 @@ const App: React.FC = () => {
           type,
           timestamp: new Date().toISOString()
       };
-      setActivityLogs(prev => [newLog, ...prev]);
+      setDoc(doc(null, 'logs', log.id), log);
   };
 
-  // --- Handlers ---
-
   const handleLogin = (user: User) => {
-    if(user.status === 'Pending') {
-      alert("Your account is still pending approval.");
-      return;
-    }
-    if(user.status === 'Frozen') {
-      alert("Your account has been frozen. Please contact an Administrator.");
-      return;
-    }
-    setCurrentUser(user);
-    setCurrentView(ViewState.DASHBOARD);
+      setCurrentUser(user);
+      setCurrentView(ViewState.DASHBOARD);
+      logActivity('Login', 'User logged into the system', 'System');
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
-    setCurrentView(ViewState.CANDIDATE_PORTAL);
-  };
-
-  const handleJobSave = (jobData: Job) => {
-    if (editingJob) {
-        // We are editing an existing job
-        // If user is NOT admin, any edit forces status to 'Pending Approval'
-        const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'SuperAdmin';
-        const updatedStatus = isAdmin ? jobData.status : (jobData.status === 'Draft' ? 'Draft' : 'Pending Approval');
-        
-        const updatedJob = {
-            ...jobData,
-            id: editingJob.id, // Ensure we keep original ID
-            listingReference: editingJob.listingReference, // Ensure reference doesn't change
-            createdAt: editingJob.createdAt, // Keep original creation date
-            status: updatedStatus,
-            lastActionBy: currentUser?.name,
-            lastActionReason: isAdmin ? 'Updated by Admin' : 'Edited by Staff - Pending Approval',
-            lastActionDate: new Date().toISOString()
-        };
-
-        setJobs(jobs.map(j => j.id === editingJob.id ? updatedJob : j));
-        
-        logActivity(
-            'Edited Job',
-            `Updated listing ${updatedJob.title} (${updatedJob.listingReference})`,
-            'Job'
-        );
-        
-        if(!isAdmin && updatedStatus === 'Pending Approval') {
-            alert("Job updated. It is now Pending Approval.");
-        }
-        
-        setEditingJob(null);
-    } else {
-        // Creating new job
-        const newJob = { 
-            ...jobData, 
-            dateOpened: jobData.status === 'Active' ? new Date().toISOString() : undefined 
-        };
-        setJobs([newJob, ...jobs]);
-        setNextJobSequence(prev => prev + 1);
-        
-        logActivity(
-            jobData.status === 'Draft' ? 'Drafted Job' : 'Posted Job',
-            `${jobData.status === 'Draft' ? 'Saved draft' : 'Created listing'} for ${jobData.title} (${jobData.listingReference})`,
-            'Job'
-        );
-
-        if (jobData.status === 'Active') alert(`Job posted successfully.`);
-    }
-
-    setCurrentView(ViewState.JOBS);
-  };
-
-  const handleEditJob = (jobId: string) => {
-      const jobToEdit = jobs.find(j => j.id === jobId);
-      if (jobToEdit) {
-          setEditingJob(jobToEdit);
-          setCurrentView(ViewState.CREATE_JOB);
+      if (impersonatingAdmin) {
+          setCurrentUser(impersonatingAdmin);
+          setImpersonatingAdmin(null);
+          logActivity('Stop Impersonation', 'Returned to admin account', 'System');
+      } else {
+          setCurrentUser(null);
+          setCurrentView(ViewState.LOGIN);
       }
   };
 
-  const handleCancelEdit = () => {
-      setEditingJob(null);
+  const handleSaveJob = (j: Job) => { 
+      if(jobs.find(job => job.id === j.id)) updateDoc(doc(null, 'jobs', j.id), j);
+      else setDoc(doc(null, 'jobs', j.id), j);
       setCurrentView(ViewState.JOBS);
+      logActivity(j.status === 'Active' ? 'Publish Job' : 'Save Job', `Job: ${j.title}`, 'Job');
   };
 
-  const handleScreeningComplete = (candidate: Candidate) => {
-    const updatedCandidate = {
-        ...candidate,
-        timeline: [
-            ...(candidate.timeline || []),
-            { status: 'Screened', date: new Date().toISOString(), note: `AI Score: ${candidate.screeningResult?.matchScore}` }
-        ]
-    };
-    setCandidates(prev => {
-        const exists = prev.find(c => c.id === candidate.id);
-        if (exists) return prev.map(c => c.id === candidate.id ? updatedCandidate : c);
-        return [updatedCandidate, ...prev];
-    });
-    logActivity('Screened Candidate', `AI Screen completed for ${candidate.name} (Score: ${candidate.screeningResult?.matchScore}%)`, 'Candidate');
-  };
-
-  const handleCandidateApplication = (candidate: Candidate) => {
-    const newCandidate = {
-        ...candidate,
-        applicationDate: new Date().toISOString(),
-        timeline: [{ status: 'Applied', date: new Date().toISOString() }]
-    };
-    setCandidates([newCandidate, ...candidates]);
-  };
-  
-  const handleCandidateRegistration = (profile: Candidate) => {
-    setCandidateProfiles([...candidateProfiles, profile]);
-    setCandidates([...candidates, profile]); 
-  };
-
-  const handleQuickRegister = (profile: Candidate) => {
-      setCandidates([profile, ...candidates]);
-      logActivity('Quick Register', `Manually added profile for ${profile.name} from CV upload`, 'Candidate');
-  };
-
-  const handleSubscribe = (email: string, keywords: string[]) => {
-    setSubscribers(prev => [...prev, { email, keywords }]);
-  };
-
-  const handleAddUser = (newUser: User) => {
-      setUsers([...users, newUser]);
-      logActivity('Added Team Member', `Invited ${newUser.name} as ${newUser.role}`, 'Team');
-  };
-
-  const handleRemoveUser = (userId: string) => {
-      const user = users.find(u => u.id === userId);
-      setUsers(users.filter(u => u.id !== userId));
-      logActivity('Removed Team Member', `Removed access for ${user?.name}`, 'Team');
-  };
-
-  const handleUpdateUser = (updatedUser: User) => {
-      setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
-      logActivity('Updated Team Member', `Updated details for ${updatedUser.name}`, 'Team');
-  };
-
-  const handleApproveUser = (userId: string) => {
-      const user = users.find(u => u.id === userId);
-      setUsers(users.map(u => u.id === userId ? { ...u, status: 'Active' } : u));
-      logActivity('Approved User', `Activated account for ${user?.name}`, 'Team');
-  };
-  
-  const handleUpdateUserStatus = (userId: string, newStatus: 'Active' | 'Frozen' | 'Pending') => {
-      const user = users.find(u => u.id === userId);
-      if (!user) return;
-      
-      setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus } : u));
-      logActivity('Changed User Status', `Changed status of ${user.name} to ${newStatus}`, 'Team');
-  };
-  
-  const handleUpdateUserAvatar = (userId: string, avatar: string) => {
-      setUsers(users.map(u => u.id === userId ? { ...u, avatar } : u));
-      if(currentUser?.id === userId) {
-          logActivity('Updated Profile', 'Updated profile picture', 'System');
+  const handleDeleteJob = (id: string) => {
+      const job = jobs.find(j => j.id === id);
+      if(job) {
+          updateDoc(doc(null, 'jobs', id), { ...job, status: 'Archived', isArchived: true, archivedAt: new Date().toISOString() });
+          logActivity('Archive Job', `Archived: ${job.title}`, 'Job');
       }
   };
 
-  const handleApproveJob = (jobId: string, reason: string) => {
-    const job = jobs.find(j => j.id === jobId);
-    setJobs(jobs.map(j => j.id === jobId ? { 
-        ...j, 
-        status: 'Active', 
-        dateOpened: new Date().toISOString(),
-        lastActionBy: currentUser?.name,
-        lastActionReason: reason,
-        lastActionDate: new Date().toISOString()
-    } : j));
-    logActivity('Approved Job', `Approved listing ${job?.listingReference}. Reason: ${reason}`, 'Job');
+  const handleAddUser = (u: User) => { 
+      // Sequential Staff ID Logic
+      let nextNum = 1;
+      if (users.length > 0) {
+          const maxId = users.reduce((max, user) => {
+              // Extract number from STF-XXX
+              const strNum = user.staffNumber?.replace('STF-', '') || '0';
+              const num = parseInt(strNum, 10);
+              return !isNaN(num) && num > max ? num : max;
+          }, 0);
+          nextNum = maxId + 1;
+      }
+      
+      const autoStaffId = `STF-${String(nextNum).padStart(3, '0')}`;
+      
+      const newUserWithId = {
+          ...u,
+          staffNumber: autoStaffId,
+          createdAt: new Date().toISOString()
+      };
+
+      setDoc(doc(null, 'users', u.id), newUserWithId); 
+      logActivity('Add User', `Added ${u.name} (${autoStaffId})`, 'Team'); 
   };
 
-  const handleSuspendJob = (jobId: string, reason: string) => {
-    const job = jobs.find(j => j.id === jobId);
-    setJobs(jobs.map(j => j.id === jobId ? { 
-        ...j, 
-        status: 'Suspended',
-        lastActionBy: currentUser?.name,
-        lastActionReason: reason,
-        lastActionDate: new Date().toISOString() 
-    } : j));
-    logActivity('Suspended Job', `Suspended listing ${job?.listingReference}. Reason: ${reason}`, 'Job');
+  const handleUpdateUser = (u: User) => { updateDoc(doc(null, 'users', u.id), u); if(currentUser?.id === u.id) setCurrentUser(u); logActivity('Update User', `Updated ${u.name}`, 'Team'); };
+  
+  const handleAddClient = (c: Client) => { setDoc(doc(null, 'clients', c.id), c); logActivity('Add Client', `Added ${c.name}`, 'Client'); };
+  const handleUpdateClient = (c: Client) => { updateDoc(doc(null, 'clients', c.id), c); logActivity('Update Client', `Updated ${c.name}`, 'Client'); };
+
+  const handleCreateGroup = (group: ChatGroup) => {
+      setDoc(doc(null, 'chatGroups', group.id), group);
+      logActivity('Create Group', `Created chat group: ${group.name}`, 'System');
   };
 
-  const handleReinstateJob = (jobId: string, reason: string) => {
-    const job = jobs.find(j => j.id === jobId);
-    setJobs(jobs.map(j => j.id === jobId ? { 
-        ...j, 
-        status: 'Active',
-        lastActionBy: currentUser?.name,
-        lastActionReason: reason,
-        lastActionDate: new Date().toISOString()
-    } : j));
-    logActivity('Reinstated Job', `Reinstated listing ${job?.listingReference}. Reason: ${reason}`, 'Job');
+  const handleUpdateGroup = (group: ChatGroup) => {
+      updateDoc(doc(null, 'chatGroups', group.id), group);
   };
 
-  const handleDeleteJob = (jobId: string) => {
-     const job = jobs.find(j => j.id === jobId);
-     // Admin (2nd tier) or SuperAdmin (1st tier) can delete
-     const canDelete = currentUser?.role === 'Admin' || currentUser?.role === 'SuperAdmin';
-     
-     if(canDelete || job?.status === 'Draft') {
-         if(window.confirm("Delete this job permanently?")) {
-             setJobs(jobs.filter(j => j.id !== jobId));
-             logActivity('Deleted Job', `Permanently deleted ${job?.title} (${job?.listingReference})`, 'Job');
-         }
-     } else {
-         setJobs(jobs.map(j => j.id === jobId ? { ...j, status: 'Pending Deletion' } : j));
-         logActivity('Requested Deletion', `Marked ${job?.title} for deletion`, 'Job');
-         alert("Job marked for deletion. Admin approval required.");
-     }
+  const handleSendMessage = (text: string, type: any, recipientId?: string, fileData?: any, metadata?: any, isPinned?: boolean, replyToId?: string, groupId?: string) => {
+      if (!currentUser) return;
+      const msg: ChatMessage = {
+          id: `msg-${Date.now()}`,
+          senderId: currentUser.id,
+          recipientId,
+          groupId,
+          text,
+          type,
+          fileName: fileData?.name,
+          fileUrl: fileData?.url,
+          timestamp: new Date().toISOString(),
+          read: false,
+          metadata,
+          isPinned,
+          replyToId
+      };
+      setDoc(doc(null, 'messages', msg.id), msg);
   };
 
-  const handleAddClient = (clientData: Client) => {
-     // Add footprint
-     const newClient = {
-         ...clientData,
-         createdBy: currentUser?.id,
-         createdByName: currentUser?.name,
-         createdAt: new Date().toISOString()
-     };
-     setClients([...clients, newClient]);
-     logActivity('Created Client', `Added new client: ${clientData.name}`, 'Client');
-  };
+  // --- Domain Routing ---
 
-  const handleUpdateClient = (updatedClient: Client) => {
-      setClients(clients.map(c => c.id === updatedClient.id ? updatedClient : c));
-      logActivity('Updated Client', `Updated details for ${updatedClient.name}`, 'Client');
-  };
-
-  const handleAddExpense = (clientId: string, expense: Expense) => {
-      setClients(clients.map(c => {
-          if(c.id === clientId) {
-              return {
-                  ...c,
-                  expenses: [...(c.expenses || []), expense]
-              };
-          }
-          return c;
-      }));
-      logActivity('Added Expense', `Added expense record for client`, 'Client');
-  };
-
-  const handleTransferPortfolio = (fromId: string, toId: string) => {
-     const fromUser = users.find(u => u.id === fromId);
-     const toUser = users.find(u => u.id === toId);
-     
-     if (!fromUser || !toUser) return;
-
-     // Get jobs owned by Source
-     const jobsToTransfer = jobs.filter(j => j.postedBy === fromId);
-     
-     if (jobsToTransfer.length === 0) {
-         alert("No jobs found for the selected source user.");
-         return;
-     }
-
-     setJobs(jobs.map(j => {
-         if (j.postedBy === fromId) {
-             return {
-                 ...j,
-                 postedBy: toId,
-                 recruiterName: toUser.name,
-                 recruiterAvatar: toUser.avatar
-             };
-         }
-         return j;
-     }));
-     
-     logActivity('Transferred Portfolio', `Transferred ${jobsToTransfer.length} jobs from ${fromUser.name} to ${toUser.name}`, 'System');
-     alert(`Successfully transferred ${jobsToTransfer.length} jobs.`);
-  };
-
-  // --- Render Logic ---
-  const renderContent = () => {
-    switch (currentView) {
-      case ViewState.LOGIN:
-        return (
-           <Login 
-              users={users} 
-              onLogin={handleLogin} 
-              onPublicView={() => setCurrentView(ViewState.CANDIDATE_PORTAL)} 
-           />
-        );
-      case ViewState.DASHBOARD:
-        return <Dashboard jobs={jobs} candidates={candidates} onViewJobs={() => setCurrentView(ViewState.JOBS)}/>;
-      case ViewState.JOBS:
-        return (
-          <JobList 
-            jobs={jobs} 
-            clients={clients}
-            currentUser={currentUser} 
-            onApprove={handleApproveJob} 
-            onDelete={handleDeleteJob}
-            onSuspend={handleSuspendJob}
-            onReinstate={handleReinstateJob}
-            onEdit={handleEditJob}
-          />
-        );
-      case ViewState.CREATE_JOB:
-        return (
-          <JobCreator 
-            onSave={handleJobSave} 
-            onCancel={handleCancelEdit} 
-            currentUser={currentUser}
-            clients={clients}
-            nextRefNumber={editingJob ? editingJob.listingReference : `THO-${String(nextJobSequence).padStart(4, '0')}`}
-            initialData={editingJob}
-          />
-        );
-      case ViewState.SCREENING:
-        return (
-          <CandidateScreener 
-            jobs={jobs} 
-            onScreeningComplete={handleScreeningComplete} 
-            onQuickRegister={handleQuickRegister}
-          />
-        );
-      case ViewState.TEAM:
-        return (
-          <TeamManagement 
-            users={users} 
-            jobs={jobs}
-            currentUser={currentUser} 
-            activityLogs={activityLogs}
-            onAddUser={handleAddUser} 
-            onRemoveUser={handleRemoveUser} 
-            onUpdateUser={handleUpdateUser}
-            onApproveUser={handleApproveUser}
-            onUpdateStatus={handleUpdateUserStatus}
-            onTransferPortfolio={handleTransferPortfolio}
-            onUpdateAvatar={handleUpdateUserAvatar}
-          />
-        );
-      case ViewState.CLIENTS:
-        return <Clients clients={clients} jobs={jobs} currentUser={currentUser} onAddClient={handleAddClient} onUpdateClient={handleUpdateClient} />;
-      case ViewState.CANDIDATES_LIST:
-        return <Candidates candidates={candidates} jobs={jobs} />;
-      case ViewState.LEADS:
-        return <Leads jobs={jobs} candidates={candidates} />;
-      case ViewState.FINANCIALS:
-        return (
-            <Financials 
-                clients={clients} 
+  if (currentDomain === 'jobs') {
+      return (
+          <>
+            <CandidatePortal 
                 jobs={jobs} 
-                currentUser={currentUser} 
-                onUpdateClient={handleUpdateClient}
-                onAddExpense={handleAddExpense}
+                candidates={candidates} 
+                onApply={(c) => { 
+                    if(candidates.find(cand => cand.id === c.id)) updateDoc(doc(null, 'candidates', c.id), c);
+                    else setDoc(doc(null, 'candidates', c.id), c); 
+                }} 
+                onSubscribe={(email, keywords) => console.log(email, keywords)}
+                onLoginClick={() => {
+                    // In real world, this would redirect to staff.thehiringorg.co.za
+                    setCurrentDomain('staff'); 
+                }}
+                onRegister={(c) => setDoc(doc(null, 'candidates', c.id), c)}
+                systemConfig={systemConfig}
             />
-        );
-      case ViewState.CANDIDATE_PORTAL:
-        return (
-          <CandidatePortal 
-            jobs={jobs}
-            candidates={candidates}
-            onApply={handleCandidateApplication}
-            onSubscribe={handleSubscribe}
-            onRegister={handleCandidateRegistration}
-            onLoginClick={() => setCurrentView(ViewState.LOGIN)}
-          />
-        );
-      default:
-        return <Dashboard jobs={jobs} candidates={candidates} />;
-    }
-  };
+            <DevDomainSwitcher current={currentDomain} onChange={setCurrentDomain}/>
+          </>
+      );
+  }
+
+  if (currentDomain === 'client') {
+      return (
+          <>
+            <ClientPortal 
+                clients={clients}
+                jobs={jobs}
+                serviceRequests={serviceRequests}
+                onLogin={() => {}}
+                onRequestService={(req) => setDoc(doc(null, 'serviceRequests', req.id), req)}
+                onRegister={(c) => setDoc(doc(null, 'clients', c.id), c)}
+                onBackToLogin={() => {
+                    // Handled internally in component for now, or reset state
+                }}
+                systemConfig={systemConfig}
+                initialClient={impersonatingClientId ? clients.find(c => c.id === impersonatingClientId) : null}
+                onBackToAdmin={impersonatingClientId ? () => {
+                    setImpersonatingClientId(null);
+                    setCurrentDomain('staff');
+                } : undefined}
+            />
+            <DevDomainSwitcher current={currentDomain} onChange={setCurrentDomain}/>
+          </>
+      );
+  }
+
+  // STAFF DOMAIN (Default / Internal OS)
+  if (!currentUser) {
+      return (
+          <>
+            <Login 
+                users={users} 
+                onLogin={handleLogin} 
+                onRegister={handleAddUser} 
+                onPublicView={() => setCurrentDomain('jobs')}
+                onClientPortal={() => setCurrentDomain('client')}
+            />
+            <DevDomainSwitcher current={currentDomain} onChange={setCurrentDomain}/>
+          </>
+      );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {currentView === ViewState.CANDIDATE_PORTAL ? (
-          renderContent()
-      ) : (
-          <div className="flex h-screen">
-              <Sidebar 
-                currentView={currentView} 
-                setView={setCurrentView} 
-                currentUser={currentUser}
-                onLogout={handleLogout}
-              />
-              <main className="flex-1 ml-64 overflow-y-auto h-screen">
-                <div className="p-8">
-                   {renderContent()}
-                </div>
-              </main>
+    <div className="flex h-screen bg-slate-100 overflow-hidden">
+      <Sidebar 
+          currentView={currentView} 
+          setView={setCurrentView} 
+          currentUser={currentUser} 
+          onLogout={handleLogout}
+          impersonatingAdmin={impersonatingAdmin}
+          onStopImpersonation={() => { setCurrentUser(impersonatingAdmin); setImpersonatingAdmin(null); }}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          pendingCount={jobs.filter(j => j.status === 'Pending Approval').length}
+          chatUnreadCount={messages.filter(m => m.recipientId === currentUser?.id && !m.read).length}
+          allUsers={users}
+      />
+      
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* Mobile Header Toggle */}
+          <div className="md:hidden bg-slate-800 text-white p-4 flex items-center justify-between">
+              <div className="font-bold">The Hiring Org</div>
+              <button onClick={() => setIsSidebarOpen(true)}>Menu</button>
           </div>
-      )}
+
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 relative">
+              {currentView === ViewState.DASHBOARD && <Dashboard jobs={jobs} candidates={candidates} onViewJobs={() => setCurrentView(ViewState.JOBS)} />}
+              {currentView === ViewState.JOBS && <JobList jobs={jobs} clients={clients} candidates={candidates} currentUser={currentUser} onEdit={(id) => { /* Navigate to edit */ }} onDelete={handleDeleteJob} />}
+              {currentView === ViewState.CREATE_JOB && <JobCreator onSave={handleSaveJob} onCancel={() => setCurrentView(ViewState.JOBS)} currentUser={currentUser} users={users} clients={clients} nextRefNumber={`JOB-${jobs.length + 1001}`} />}
+              {currentView === ViewState.SCREENING && <CandidateScreener jobs={jobs} onScreeningComplete={(c) => { setDoc(doc(null, 'candidates', c.id), c); }} />}
+              {currentView === ViewState.CANDIDATES_LIST && <Candidates candidates={candidates} jobs={jobs} currentUser={currentUser} />}
+              {currentView === ViewState.LEADS && <Leads jobs={jobs} candidates={candidates} />}
+              
+              {currentView === ViewState.TEAM && (
+                  <TeamManagement 
+                      users={users} 
+                      jobs={jobs} 
+                      currentUser={currentUser} 
+                      activityLogs={activityLogs} 
+                      onAddUser={handleAddUser} 
+                      onUpdateUser={handleUpdateUser} 
+                      onRemoveUser={(id, reason, notes) => {
+                          const user = users.find(u => u.id === id);
+                          if (user) {
+                              updateDoc(doc(null, 'users', id), { ...user, isArchived: true, archiveReason: reason, archivedAt: new Date().toISOString() });
+                              logActivity('Archive User', `Archived ${user.name}: ${reason}`, 'Team');
+                          }
+                      }} 
+                      onApproveUser={(id, reason, notes) => {
+                          const user = users.find(u => u.id === id);
+                          if (user) {
+                              updateDoc(doc(null, 'users', id), { ...user, status: 'Active', approvedBy: currentUser?.id, approvedAt: new Date().toISOString() });
+                              logActivity('Approve User', `Approved ${user.name}`, 'Team');
+                          }
+                      }}
+                      onRejectUser={(id, reason, notes) => {
+                          const user = users.find(u => u.id === id);
+                          if (user) {
+                              updateDoc(doc(null, 'users', id), { ...user, status: 'Rejected', rejectionReason: reason });
+                              logActivity('Reject User', `Rejected ${user.name}`, 'Team');
+                          }
+                      }}
+                      onUpdateStatus={(id, status, reason, notes) => {
+                          const user = users.find(u => u.id === id);
+                          if (user) {
+                              updateDoc(doc(null, 'users', id), { ...user, status, statusChangeReason: reason });
+                              logActivity('Update Status', `Set ${user.name} to ${status}`, 'Team');
+                          }
+                      }} 
+                      onTransferPortfolio={(from, to, jobIds) => { 
+                          jobIds.forEach(jid => {
+                              const job = jobs.find(j => j.id === jid);
+                              const newOwner = users.find(u => u.id === to);
+                              if (job && newOwner) {
+                                  updateDoc(doc(null, 'jobs', jid), { ...job, postedBy: to, recruiterName: newOwner.name, recruiterAvatar: newOwner.avatar });
+                              }
+                          });
+                          logActivity('Portfolio Transfer', `Transferred ${jobIds.length} jobs`, 'Team');
+                      }} 
+                      onUpdateAvatar={(id, url) => {
+                          const user = users.find(u => u.id === id);
+                          if (user) updateDoc(doc(null, 'users', id), { ...user, avatar: url });
+                      }} 
+                      onMessageUser={(userId) => { setChatTargetId(userId); setCurrentView(ViewState.CHAT); }} 
+                      onImpersonateUser={(targetUser) => {
+                          setImpersonatingAdmin(currentUser);
+                          setCurrentUser(targetUser);
+                          setCurrentView(ViewState.DASHBOARD);
+                          logActivity('Impersonation', `Admin started impersonating ${targetUser.name}`, 'System');
+                      }}
+                  />
+              )}
+
+              {currentView === ViewState.CLIENTS && <Clients 
+                  clients={clients} 
+                  jobs={jobs} 
+                  users={users} 
+                  currentUser={currentUser} 
+                  onAddClient={handleAddClient} 
+                  onUpdateClient={handleUpdateClient} 
+                  onAddExpense={(id, exp) => { /* logic */ }}
+                  onSendMessage={(text, recipientId) => handleSendMessage(text, 'text', recipientId)} 
+                  onAccessPortal={(clientId) => {
+                      setImpersonatingClientId(clientId);
+                      setCurrentDomain('client');
+                  }}
+              />}
+              {currentView === ViewState.FINANCIALS && <Financials clients={clients} jobs={jobs} currentUser={currentUser} onUpdateClient={handleUpdateClient} onAddExpense={(id, exp) => { /* logic */ }} />}
+              {currentView === ViewState.EXECUTIVE_ANALYTICS && <ExecutiveAnalytics jobs={jobs} candidates={candidates} users={users} clients={clients} activityLogs={activityLogs} />}
+              {currentView === ViewState.APPROVALS && <Approvals jobs={jobs} users={users} currentUser={currentUser} activityLogs={activityLogs} onApproveJob={(id) => { /* logic */ }} onDeleteJob={handleDeleteJob} onRejectJobDeletion={() => {}} onApproveUser={() => {}} onRejectUser={() => {}} onRemoveUser={() => {}} onViewJob={() => {}} />}
+              {currentView === ViewState.SUPER_ADMIN_SETTINGS && <SuperAdminSettings currentUser={currentUser} systemConfig={systemConfig} onUpdateConfig={(c) => setDoc(doc(null, 'config', 'main'), c)} allUsers={users} allJobs={jobs} allClients={clients} activityLogs={activityLogs} />}
+              {currentView === ViewState.COMMISSIONS && <Commissions records={commissions} users={users} currentUser={currentUser} />}
+              {currentView === ViewState.PAYROLL && <Payroll records={payrollRecords} users={users} candidates={candidates} onAddRecord={(r) => setDoc(doc(null, 'payroll', r.id), r)} onUpdateStatus={() => {}} onDeleteRecord={() => {}} />}
+              {currentView === ViewState.MONTHLY_REPORTS && <MonthlyReports jobs={jobs} users={users} commissions={commissions} candidates={candidates} currentUser={currentUser} activityLogs={activityLogs} />}
+              {currentView === ViewState.TUTORIALS && <Tutorials currentUser={currentUser} />}
+              {currentView === ViewState.CHAT && <ChatSystem 
+                  currentUser={currentUser} 
+                  users={users} 
+                  clients={clients}
+                  messages={messages} 
+                  chatGroups={chatGroups} 
+                  onSendMessage={handleSendMessage} 
+                  onUpdateStatus={() => {}} 
+                  onViewNotifications={() => setCurrentView(ViewState.NOTIFICATIONS)} 
+                  initialActiveChatId={chatTargetId}
+                  onCreateGroup={handleCreateGroup}
+                  onUpdateGroup={handleUpdateGroup} 
+              />}
+              {currentView === ViewState.NOTIFICATIONS && <NotificationsView currentUser={currentUser} onMarkAsRead={() => {}} onClearAll={() => {}} onDeleteNotification={() => {}} />}
+              {currentView === ViewState.SPECIALISED_SERVICES && <SpecialisedServices serviceRequests={serviceRequests} users={users} onUpdateStatus={() => {}} currentUser={currentUser} />}
+              {currentView === ViewState.PROFILE && currentUser && <UserProfile currentUser={currentUser} onUpdateUser={handleUpdateUser} activityLogs={activityLogs} allUsers={users} />}
+              {currentView === ViewState.SUPPORT && <SystemSupport currentUser={currentUser} tickets={systemTickets} onCreateTicket={(t) => setDoc(doc(null, 'tickets', t.id), t)} onResolveTicket={() => {}} />}
+              
+              {/* GEMINI CO-PILOT (ALWAYS ON) */}
+              {currentUser && (
+                  <CoPilot 
+                    jobs={jobs} 
+                    candidates={candidates} 
+                    clients={clients} 
+                    users={users} 
+                    currentUser={currentUser}
+                  />
+              )}
+          </main>
+      </div>
+      <DevDomainSwitcher current={currentDomain} onChange={setCurrentDomain}/>
     </div>
   );
 };
+
+// Helper Component for Dev Environment to simulate Domains
+const DevDomainSwitcher = ({ current, onChange }: { current: AppDomain, onChange: (d: AppDomain) => void }) => (
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl z-[100] flex items-center gap-4 text-xs font-mono border border-slate-700 animate-fadeIn">
+        <div className="flex items-center gap-2">
+            <Monitor size={14} className="text-blue-400"/>
+            <span className="text-slate-400">Domain Simulator:</span>
+        </div>
+        <div className="flex bg-slate-800 rounded p-1">
+            <button 
+                onClick={() => onChange('jobs')}
+                className={`px-3 py-1 rounded transition-all ${current === 'jobs' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+            >
+                jobs.
+            </button>
+            <button 
+                onClick={() => onChange('staff')}
+                className={`px-3 py-1 rounded transition-all ${current === 'staff' ? 'bg-orange-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+            >
+                staff.
+            </button>
+            <button 
+                onClick={() => onChange('client')}
+                className={`px-3 py-1 rounded transition-all ${current === 'client' ? 'bg-green-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+            >
+                client.
+            </button>
+        </div>
+    </div>
+);
 
 export default App;
